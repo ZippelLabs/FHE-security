@@ -2814,26 +2814,48 @@ contract VersionAwareFHE {
 | **TFHE** | Torus FHE - fast bootstrapping scheme |
 | **Transient Permission** | Transaction-scoped ACL grant |
 
-## Appendix D: Additional Resources
+## Appendix D: References & Sources
 
-### Security Research Papers
+### Academic Papers
 
-1. **Key Recovery Attacks on FHE Libraries** - Zellic, 2024
-2. **Side-Channel Attacks on Homomorphic Encryption** - NCSU Research
-3. **dBFV White Paper** - [eprint.iacr.org/2025/2321](https://eprint.iacr.org/2025/2321)
-4. **Threshold Decryption Network** - [eprint.iacr.org/2025/1781](https://eprint.iacr.org/2025/1781)
+| Paper | Authors/Org | Year | Topic |
+|-------|-------------|------|-------|
+| [dBFV: Threshold Decryption for FHE](https://eprint.iacr.org/2025/2321) | Fhenix Team | 2025 | dBFV scheme, noise-free threshold decryption |
+| [Threshold Decryption Networks](https://eprint.iacr.org/2025/1781) | Fhenix | 2025 | TDN architecture and security model |
+| [TFHE: Fast FHE over the Torus](https://eprint.iacr.org/2018/421) | Chillotti et al. | 2018 | TFHE scheme foundations |
+| [BFV Scheme](https://eprint.iacr.org/2012/144) | Brakerski | 2012 | Original BFV construction |
+| [Key Recovery Attacks on FHE](https://www.zellic.io/blog/fhe-key-recovery) | Zellic | 2024 | Library implementation vulnerabilities |
+
+### Security Audit Reports
+
+| Audit | Auditor | Scope | Year |
+|-------|---------|-------|------|
+| Zama Protocol (~70 audit-weeks) | Trail of Bits, OpenZeppelin, Zenith, Burrasec | TFHE-rs, fhEVM, KMS, Gateway | 2024 |
+| Fhenix CoFHE | Pending/TBA | Threshold Decryption Network | 2025 |
+
+> [!NOTE]
+> Zama's ~70 audit-weeks makes TFHE-rs the first professionally audited FHE library. Audit reports available at [zama.org/blog](https://www.zama.org/blog).
 
 ### Official Documentation
 
-- [Fhenix Developer Docs](https://docs.fhenix.io/)
-- [Zama Documentation](https://docs.zama.ai/)
-- [OpenZeppelin FHEVM Security Guide](https://blog.openzeppelin.com/a-developers-guide-to-fhevm-security)
+- [Fhenix Developer Docs](https://docs.fhenix.io/) - CoFHE integration, cofhejs SDK
+- [Zama Documentation](https://docs.zama.ai/) - fhEVM, TFHE-rs, Concrete
+- [OpenZeppelin FHEVM Security Guide](https://blog.openzeppelin.com/a-developers-guide-to-fhevm-security) - Security patterns
+- [Homomorphic Encryption Standard](https://homomorphicencryption.org/) - Parameter recommendations
+
+### Industry Standards
+
+| Standard | Organization | Relevance |
+|----------|--------------|-----------|
+| Post-Quantum Cryptography Guidelines | NIST | Lattice-based security parameters |
+| Homomorphic Encryption Standard | HomomorphicEncryption.org | FHE security parameter recommendations |
+| ERC-20 Token Standard | Ethereum | FHERC20 compatibility |
 
 ### Community Resources
 
-- [awesome-fhenix](https://github.com/FhenixProtocol/awesome-fhenix)
-- [Crypto 101](https://www.crypto101.io/)
-- [FHE Textbook](https://fhetextbook.github.io/)
+- [awesome-fhenix](https://github.com/FhenixProtocol/awesome-fhenix) - Curated FHE resources
+- [Crypto 101](https://www.crypto101.io/) - Cryptography fundamentals
+- [FHE Textbook](https://fhetextbook.github.io/) - Academic reference
 
 ## Appendix E: Development & Audit Setup
 
