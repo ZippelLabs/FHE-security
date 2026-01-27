@@ -8,14 +8,14 @@
 
 ## Table of Contents
 
-1. [Introduction to FHE for Security Engineers & Developers](#chapter-1-introduction-to-fhe-for-security-engineers--developers)
-2. [Cryptographic Foundations & Security Properties](#chapter-2-cryptographic-foundations--security-properties)
-3. [Zama fhEVM - Architecture & Security Model](#chapter-3-zama-fhevm---architecture--security-model)
-4. [Fhenix CoFHE Protocol - Deep Dive & Security](#chapter-4-fhenix-cofhe-protocol---deep-dive--security)
-5. [Common Vulnerabilities in FHE Smart Contracts](#chapter-5-common-vulnerabilities-in-fhe-smart-contracts)
-6. [Security Best Practices & Secure Design Patterns](#chapter-6-security-best-practices--secure-design-patterns)
-7. [Auditing FHE Protocols - A Security Engineer's Guide](#chapter-7-auditing-fhe-protocols---a-security-engineers-guide)
-8. [Ecosystem, Research & Future Directions](#chapter-8-ecosystem-research--future-directions)
+1. [Chapter 1: Introduction](#chapter-1-introduction-to-fhe-for-security-engineers--developers)
+2. [Chapter 2: Cryptographic Foundations](#chapter-2-cryptographic-foundations--security-properties)
+3. [Chapter 3: Zama fhEVM](#chapter-3-zama-fhevm---architecture--security-model)
+4. [Chapter 4: Fhenix CoFHE](#chapter-4-fhenix-cofhe-protocol---deep-dive--security)
+5. [Chapter 5: Common Vulnerabilities](#chapter-5-common-vulnerabilities-in-fhe-smart-contracts)
+6. [Chapter 6: Security Best Practices](#chapter-6-security-best-practices--secure-design-patterns)
+7. [Chapter 7: Auditing FHE Protocols](#chapter-7-auditing-fhe-protocols---a-security-engineers-guide)
+8. [Chapter 8: Ecosystem & Research](#chapter-8-ecosystem-research--future-directions)
 9. [Appendices](#appendices)
 
 ---
@@ -2739,7 +2739,7 @@ contract VersionAwareFHE {
 
 ---
 
-# Appendices {#appendices}
+# Appendices
 
 ## Appendix A: Vulnerability Reference Quick Guide
 
