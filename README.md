@@ -1,7 +1,5 @@
 # FHE Security Handbook
 
-> WIP: improvement needed
-
 **A Security-Focused Guide to Fully Homomorphic Encryption for Web3 Protocols**
 
 *Aligned with Zama fhEVM, Fhenix CoFHE, and Web3 Security Best Practices*
@@ -10,19 +8,19 @@
 
 ## Table of Contents
 
-1. [Introduction to FHE for Security Engineers & Developers](#chapter-1-introduction)
-2. [Cryptographic Foundations & Security Properties](#chapter-2-cryptographic-foundations)
-3. [Zama fhEVM - Architecture & Security Model](#chapter-3-zama-fhevm)
-4. [Fhenix CoFHE Protocol - Deep Dive & Security](#chapter-4-fhenix-cofhe)
-5. [Common Vulnerabilities in FHE Smart Contracts](#chapter-5-vulnerabilities)
-6. [Security Best Practices & Secure Design Patterns](#chapter-6-best-practices)
-7. [Auditing FHE Protocols - A Security Engineer's Guide](#chapter-7-auditing)
-8. [Ecosystem, Research & Future Directions](#chapter-8-ecosystem)
+1. [Chapter 1: Introduction](#chapter-1-introduction-to-fhe-for-security-engineers--developers)
+2. [Chapter 2: Cryptographic Foundations](#chapter-2-cryptographic-foundations--security-properties)
+3. [Chapter 3: Zama fhEVM](#chapter-3-zama-fhevm---architecture--security-model)
+4. [Chapter 4: Fhenix CoFHE](#chapter-4-fhenix-cofhe-protocol---deep-dive--security)
+5. [Chapter 5: Common Vulnerabilities](#chapter-5-common-vulnerabilities-in-fhe-smart-contracts)
+6. [Chapter 6: Security Best Practices](#chapter-6-security-best-practices--secure-design-patterns)
+7. [Chapter 7: Auditing FHE Protocols](#chapter-7-auditing-fhe-protocols---a-security-engineers-guide)
+8. [Chapter 8: Ecosystem & Research](#chapter-8-ecosystem-research--future-directions)
 9. [Appendices](#appendices)
 
 ---
 
-# Chapter 1: Introduction {#chapter-1-introduction}
+# Chapter 1: Introduction to FHE for Security Engineers & Developers
 
 ## What is Fully Homomorphic Encryption?
 
@@ -175,7 +173,7 @@ flowchart LR
 
 ---
 
-# Chapter 2: Cryptographic Foundations & Security Properties {#chapter-2-cryptographic-foundations}
+# Chapter 2: Cryptographic Foundations & Security Properties
 
 ## Mathematical Prerequisites
 
@@ -305,7 +303,7 @@ Standard FHE security guarantee:
 
 ---
 
-# Chapter 3: Zama fhEVM - Architecture & Security Model {#chapter-3-zama-fhevm}
+# Chapter 3: Zama fhEVM - Architecture & Security Model
 
 ## Overview of Zama's Approach
 
@@ -461,7 +459,7 @@ Zama targets **128-bit IND-CPA security** based on lattice assumptions:
 
 ---
 
-# Chapter 4: Fhenix CoFHE Protocol - Deep Dive & Security {#chapter-4-fhenix-cofhe}
+# Chapter 4: Fhenix CoFHE Protocol - Deep Dive & Security
 
 ## CoFHE Architecture Overview
 
@@ -662,7 +660,7 @@ function grantTransientAccess(euint64 ciphertext) internal {
 
 ---
 
-# Chapter 5: Common Vulnerabilities in FHE Smart Contracts {#chapter-5-vulnerabilities}
+# Chapter 5: Common Vulnerabilities in FHE Smart Contracts
 
 *Based on OpenZeppelin audit findings and production security research*
 
@@ -991,7 +989,7 @@ function executeUserOp(UserOperation calldata op) external {
 
 ---
 
-# Chapter 6: Security Best Practices & Secure Design Patterns {#chapter-6-best-practices}
+# Chapter 6: Security Best Practices & Secure Design Patterns
 
 ## Secure Coding Guidelines
 
@@ -1055,6 +1053,305 @@ event BalanceUpdated(address indexed user, bytes32 encryptedBalance);
 
 // 3. Formal verification of logic structure
 // Use symbolic execution to verify paths
+```
+
+### Debugging Encrypted Logic
+
+**Core Challenge**: You cannot inspect encrypted values during execution—this is by design. Debugging FHE contracts requires different strategies.
+
+#### The Encrypted Error Pattern
+
+Instead of reverting (which leaks information), maintain encrypted error states:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {FHE, euint8, euint64, ebool} from "@fhenix/cofhe-contracts/FHE.sol";
+
+contract DebugableToken {
+    // Encrypted state
+    mapping(address => euint64) private _balances;
+    mapping(address => euint8) public lastError;
+    uint64 public constant MAX_SUPPLY = type(uint64).max / 2;
+    
+    // Error codes (must be initialized in constructor, not at declaration)
+    euint8 public ERR_NONE;
+    euint8 public ERR_INSUFFICIENT;
+    euint8 public ERR_OVERFLOW;
+    
+    constructor() {
+        ERR_NONE = FHE.asEuint8(0);
+        ERR_INSUFFICIENT = FHE.asEuint8(1);
+        ERR_OVERFLOW = FHE.asEuint8(2);
+    }
+    
+    function transfer(address to, euint64 amount) external returns (ebool) {
+        ebool sufficient = FHE.gte(_balances[msg.sender], amount);
+        ebool noOverflow = FHE.lte(FHE.add(_balances[to], amount), FHE.asEuint64(MAX_SUPPLY));
+        
+        // Store encrypted error code instead of reverting
+        lastError[msg.sender] = FHE.select(
+            sufficient,
+            FHE.select(noOverflow, ERR_NONE, ERR_OVERFLOW),
+            ERR_INSUFFICIENT
+        );
+        
+        ebool success = FHE.and(sufficient, noOverflow);
+        // ... transfer logic using FHE.select ...
+        return success;
+    }
+    
+    // User can check their last error (only they can decrypt)
+    function getLastError() external view returns (euint8) {
+        FHE.allowTransient(lastError[msg.sender], msg.sender);
+        return lastError[msg.sender];
+    }
+}
+```
+
+#### Event-Based Debug Tracking
+
+Emit ciphertext handles for off-chain analysis:
+
+```solidity
+event DebugCheckpoint(
+    string label,
+    bytes32 indexed handle,
+    address indexed actor,
+    uint256 timestamp
+);
+
+function _debug(string memory label, euint64 ct) internal {
+    emit DebugCheckpoint(label, FHE.getHandle(ct), msg.sender, block.timestamp);
+}
+
+function complexOperation(euint64 input) external {
+    _debug("input_received", input);
+    
+    euint64 step1 = FHE.mul(input, multiplier);
+    _debug("after_multiply", step1);
+    
+    euint64 step2 = FHE.add(step1, offset);
+    _debug("after_add", step2);
+    
+    // In tests, decrypt handles to verify intermediate values
+}
+```
+
+#### Common Initialization Pitfalls
+
+> [!CAUTION]
+> Encrypted variables CANNOT be initialized at declaration. This is a common mistake.
+
+```solidity
+// ❌ WRONG: Will fail to compile or behave unexpectedly
+contract BadInit {
+    euint64 private value = FHE.asEuint64(0);  // NOT ALLOWED
+}
+
+// ✅ CORRECT: Initialize in constructor
+contract GoodInit {
+    euint64 private value;
+    
+    constructor() {
+        value = FHE.asEuint64(0);
+    }
+}
+```
+
+#### Transpiler Limitations to Avoid
+
+The FHE transpiler has constraints that affect contract design:
+
+| Pattern | Supported? | Workaround |
+|---------|-----------|------------|
+| Variable loop bounds | ❌ No | Use fixed-iteration loops with conditional execution |
+| Early returns | ❌ No | Use result accumulator pattern |
+| Dynamic arrays | ❌ No | Use fixed-size arrays |
+| Recursion | ❌ No | Flatten to iterative |
+
+```solidity
+// ❌ WRONG: Dynamic loop
+function sum(euint64[] memory values) external returns (euint64) {
+    euint64 total = FHE.asEuint64(0);
+    for (uint i = 0; i < values.length; i++) {  // Dynamic!
+        total = FHE.add(total, values[i]);
+    }
+    return total;
+}
+
+// ✅ CORRECT: Fixed iteration with bounds
+uint256 public constant MAX_VALUES = 10;
+
+function sum(euint64[MAX_VALUES] memory values, uint256 count) external returns (euint64) {
+    require(count <= MAX_VALUES, "Too many values");
+    euint64 total = FHE.asEuint64(0);
+    for (uint i = 0; i < MAX_VALUES; i++) {  // Fixed bound
+        ebool shouldAdd = FHE.asEbool(i < count);
+        total = FHE.select(shouldAdd, FHE.add(total, values[i]), total);
+    }
+    return total;
+}
+```
+
+### End-to-End Integration Testing
+
+Complete workflow for testing FHE contracts from encryption to decryption.
+
+#### Test Environment Setup
+
+```javascript
+// hardhat.config.js
+require("@fhenix/hardhat-plugin");
+
+module.exports = {
+    solidity: "0.8.20",
+    networks: {
+        fhenixLocal: {
+            url: "http://localhost:8545",
+            accounts: [process.env.PRIVATE_KEY],
+        },
+    },
+    fhenix: {
+        // Use mock mode for fast local testing
+        mockMode: true,
+    },
+};
+```
+
+#### Complete Integration Test Pattern
+
+```javascript
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
+const { createCofheInstance } = require("@fhenix/cofhejs");
+
+describe("Confidential Token E2E", function() {
+    let token, owner, alice, bob;
+    let cofhe;
+    
+    before(async function() {
+        [owner, alice, bob] = await ethers.getSigners();
+        
+        // Deploy token
+        const Token = await ethers.getContractFactory("SecureFHERC20");
+        token = await Token.deploy();
+        
+        // Initialize FHE client
+        cofhe = await createCofheInstance({
+            provider: ethers.provider,
+        });
+    });
+    
+    it("should transfer encrypted amounts correctly", async function() {
+        // 1. Mint to Alice (plaintext for setup)
+        await token.mint(alice.address, 1000);
+        
+        // 2. Alice encrypts transfer amount client-side
+        const encAmount = await cofhe.encrypt(100, "uint64");
+        const proof = await cofhe.generateProof(encAmount);
+        
+        // 3. Execute encrypted transfer
+        const tx = await token.connect(alice).transfer(
+            bob.address, 
+            encAmount, 
+            proof
+        );
+        await tx.wait();
+        
+        // 4. Request decryption of Bob's balance
+        const bobBalanceHandle = await token.balanceOf(bob.address);
+        
+        // 5. In mock mode, we can decrypt directly
+        const bobBalance = await cofhe.unseal(bobBalanceHandle, bob);
+        expect(bobBalance).to.equal(100);
+        
+        // 6. Verify Alice's balance decreased
+        const aliceBalanceHandle = await token.balanceOf(alice.address);
+        const aliceBalance = await cofhe.unseal(aliceBalanceHandle, alice);
+        expect(aliceBalance).to.equal(900);
+    });
+    
+    it("should handle insufficient balance gracefully", async function() {
+        // Try to transfer more than balance
+        const encAmount = await cofhe.encrypt(10000, "uint64");
+        const proof = await cofhe.generateProof(encAmount);
+        
+        await token.connect(alice).transfer(bob.address, encAmount, proof);
+        
+        // Check error code instead of revert
+        const errorHandle = await token.getLastError();
+        const errorCode = await cofhe.unseal(errorHandle, alice);
+        expect(errorCode).to.equal(1); // ERR_INSUFFICIENT
+    });
+});
+```
+
+#### Mocking the Threshold Decryption Network
+
+```javascript
+// test/helpers/mockGateway.js
+class MockGateway {
+    constructor(cofhe) {
+        this.cofhe = cofhe;
+        this.pendingDecryptions = new Map();
+    }
+    
+    async requestDecryption(handle, callback) {
+        // Simulate network delay
+        await new Promise(r => setTimeout(r, 100));
+        
+        // Decrypt using test key
+        const plaintext = await this.cofhe.decrypt(handle);
+        
+        // Call the callback
+        await callback(handle, plaintext);
+    }
+    
+    async processAllPending() {
+        for (const [handle, callback] of this.pendingDecryptions) {
+            await this.requestDecryption(handle, callback);
+        }
+        this.pendingDecryptions.clear();
+    }
+}
+
+module.exports = { MockGateway };
+```
+
+#### CI/CD Integration
+
+```yaml
+# .github/workflows/fhe-tests.yml
+name: FHE Contract Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Compile contracts
+        run: npx hardhat compile
+        
+      - name: Run FHE tests (mock mode)
+        run: npx hardhat test --network fhenixLocal
+        env:
+          FHENIX_MOCK_MODE: true
+          
+      - name: Run gas profiling
+        run: npx hardhat test --network fhenixLocal --gas-report
 ```
 
 ## Design Patterns for Secure FHE Applications
@@ -1340,7 +1637,7 @@ function unsafeTransfer(euint64 amount) external {
 
 ---
 
-# Chapter 7: Auditing FHE Protocols - A Security Engineer's Guide {#chapter-7-auditing}
+# Chapter 7: Auditing FHE Protocols - A Security Engineer's Guide
 
 ## Audit Methodology for FHE Smart Contracts
 
@@ -1542,9 +1839,311 @@ For critical FHE contracts, consider:
 - Runtime verification
 - Property-based testing with symbolic inputs
 
+## Advanced Security Research Techniques
+
+### Invariant Properties for FHE Contracts
+
+Invariants are properties that must **always** hold regardless of contract state or transaction sequence. For FHE contracts, these are critical for security proofs.
+
+#### Conservation Invariants
+
+These ensure value is neither created nor destroyed:
+
+```solidity
+// INV-1: Total Supply Conservation
+// ∀ transfers: sum(all_balances) == totalSupply
+// 
+// In FHE, we can't directly sum encrypted values, but we can:
+// 1. Track encrypted totalSupply separately
+// 2. Verify conservation at each operation
+
+function transfer(euint64 amount) external {
+    // Before: sender_balance + receiver_balance + others = total
+    _balances[msg.sender] = FHE.sub(_balances[msg.sender], amount);
+    _balances[to] = FHE.add(_balances[to], amount);
+    // After: (sender - amount) + (receiver + amount) + others = total
+    // Invariant preserved by construction
+}
+
+// INV-2: Mint/Burn Conservation
+function mint(address to, euint64 amount) external onlyMinter {
+    _balances[to] = FHE.add(_balances[to], amount);
+    _totalSupply = FHE.add(_totalSupply, amount);
+    // totalSupply increases exactly by minted amount
+}
+```
+
+#### Permission Invariants
+
+Ensure ACL consistency:
+
+```solidity
+// INV-3: No Unauthorized Decryption
+// ∀ ciphertexts ct, users u:
+//   canDecrypt(ct, u) ⟹ ACL.isAllowed(ct, u) ∨ u == owner(ct)
+
+// INV-4: Permission Monotonicity (optional)
+// Once permission is revoked, it cannot be re-granted without owner consent
+// Useful for compliance scenarios
+
+// INV-5: Transient Permission Scope
+// Transient permissions MUST NOT survive transaction boundaries
+```
+
+#### State Transition Invariants
+
+```solidity
+// INV-6: Auction State Machine
+// States: BIDDING → ENDED → REVEALED → SETTLED
+// BIDDING: bids can be placed, winner unknown
+// ENDED: no new bids, winner still encrypted
+// REVEALED: winner decrypted, awaiting settlement
+// SETTLED: funds distributed, immutable
+
+// Invariant: state can only move forward
+modifier validStateTransition(State newState) {
+    require(uint(newState) > uint(currentState), "Invalid transition");
+    _;
+}
+```
+
+#### Expressing Invariants for Verification
+
+```solidity
+// Express invariants as view functions for testing/verification
+contract InvariantChecks {
+    // Returns encrypted bool - true if invariant holds
+    function checkConservationInvariant() external view returns (ebool) {
+        euint64 computedTotal = FHE.asEuint64(0);
+        for (uint i = 0; i < knownAddresses.length; i++) {
+            computedTotal = FHE.add(computedTotal, _balances[knownAddresses[i]]);
+        }
+        return FHE.eq(computedTotal, _totalSupply);
+    }
+}
+```
+
+### FHE-Specific Fuzzing Patterns
+
+Standard fuzzing needs adaptation for FHE because encrypted values can't be directly inspected.
+
+#### Why Standard Fuzzing Fails
+
+| Standard Approach | FHE Problem |
+|-------------------|-------------|
+| Inspect return values | Values are encrypted |
+| Check balance changes | Balances are encrypted |
+| Detect reverts | FHE uses select, not revert |
+| Random inputs | Must be valid ciphertexts |
+
+#### Echidna Configuration for FHE
+
+```yaml
+# echidna.config.yaml
+testMode: assertion
+corpusDir: "corpus"
+testLimit: 50000
+shrinkLimit: 5000
+
+# FHE-specific settings
+deployer: "0x1234..."  # Account with decrypt permission
+sender: ["0x1234...", "0x5678..."]  # Test multiple users
+
+# Property definitions
+assertionMode: true
+```
+
+#### Property-Based Fuzzing Contract
+
+```solidity
+// contracts/test/FHEFuzz.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "../SecureFHERC20.sol";
+
+contract FHEFuzz is SecureFHERC20 {
+    uint256 private _expectedTotalSupply;
+    
+    constructor() {
+        // Initialize with known state for invariant checking
+        _expectedTotalSupply = 1_000_000;
+        _mint(msg.sender, _expectedTotalSupply);
+    }
+    
+    // PROPERTY 1: Total supply never changes (no mint/burn in transfer)
+    function echidna_total_supply_constant() public view returns (bool) {
+        // In mock mode, we can decrypt for testing
+        return FHE.decrypt(_totalSupply) == _expectedTotalSupply;
+    }
+    
+    // PROPERTY 2: No single balance exceeds total supply
+    function echidna_balance_bounded(address user) public view returns (bool) {
+        uint64 balance = FHE.decrypt(_balances[user]);
+        return balance <= _expectedTotalSupply;
+    }
+    
+    // PROPERTY 3: Transfer doesn't create value
+    function echidna_transfer_conserves(
+        address to, 
+        uint64 amount
+    ) public returns (bool) {
+        uint64 senderBefore = FHE.decrypt(_balances[msg.sender]);
+        uint64 receiverBefore = FHE.decrypt(_balances[to]);
+        uint64 sumBefore = senderBefore + receiverBefore;
+        
+        // Execute transfer (with encrypted amount for realism)
+        euint64 encAmount = FHE.asEuint64(amount);
+        transfer(to, encAmount);
+        
+        uint64 senderAfter = FHE.decrypt(_balances[msg.sender]);
+        uint64 receiverAfter = FHE.decrypt(_balances[to]);
+        uint64 sumAfter = senderAfter + receiverAfter;
+        
+        return sumAfter == sumBefore;
+    }
+    
+    // PROPERTY 4: ACL permissions are consistent
+    function echidna_acl_consistency() public view returns (bool) {
+        // Verify that all stored ciphertexts have valid ACL entries
+        return true; // Implement based on ACL structure
+    }
+}
+```
+
+#### Running FHE Fuzzing
+
+```bash
+# Install Echidna
+pip install echidna
+
+# Run with FHE mock mode enabled
+FHENIX_MOCK_MODE=true echidna contracts/test/FHEFuzz.sol \
+    --config echidna.config.yaml \
+    --contract FHEFuzz
+
+# Example output:
+# echidna_total_supply_constant: passed! 🎉
+# echidna_balance_bounded: passed! 🎉
+# echidna_transfer_conserves: FAILED! ❌
+#   Counterexample: transfer(0x..., 18446744073709551615)
+#   → Overflow detected in conservation property
+```
+
+#### Stateful Fuzzing for ACL
+
+```solidity
+contract ACLStatefulFuzz {
+    SecureFHERC20 token;
+    mapping(address => mapping(bytes32 => bool)) expectedPermissions;
+    
+    function allow_permission(address user, euint64 ct) public {
+        bytes32 handle = FHE.getHandle(ct);
+        FHE.allow(ct, user);
+        expectedPermissions[user][handle] = true;
+    }
+    
+    function revoke_permission(address user, euint64 ct) public {
+        bytes32 handle = FHE.getHandle(ct);
+        FHE.revoke(ct, user);
+        expectedPermissions[user][handle] = false;
+    }
+    
+    // Property: ACL state matches our expectations
+    function echidna_acl_sync() public view returns (bool) {
+        // Verify all expected permissions match actual state
+        return true; // Implement verification logic
+    }
+}
+```
+
+### Practical Formal Verification for FHE
+
+#### What Can Be Practically Verified
+
+| Property Type | Verifiable? | Approach |
+|---------------|-------------|----------|
+| Control flow correctness | ✅ Yes | Standard symbolic execution |
+| Arithmetic bounds | ⚠️ Partial | Bounds on plaintext operations only |
+| ACL consistency | ✅ Yes | State machine verification |
+| Information flow | ⚠️ Partial | Taint analysis on handles |
+| Cryptographic security | ❌ No | Assumed from library |
+
+#### Certora Specification for FHE Token
+
+```cvl
+// specs/FHEToken.spec
+
+methods {
+    function totalSupply() external returns (uint256) envfree;
+    function balanceOf(address) external returns (uint256) envfree;
+    function transfer(address, uint256) external returns (bool);
+}
+
+// Ghost variable to track sum of all balances
+ghost mathint sumBalances {
+    init_state axiom sumBalances == 0;
+}
+
+// Hook to update ghost on balance changes
+hook Sstore _balances[KEY address user] uint256 newBalance 
+    (uint256 oldBalance) STORAGE {
+    sumBalances = sumBalances - oldBalance + newBalance;
+}
+
+// RULE: Total supply equals sum of all balances
+invariant totalSupplyInvariant()
+    to_mathint(totalSupply()) == sumBalances;
+
+// RULE: Transfer preserves total supply
+rule transferPreservesTotal(address from, address to, uint256 amount) {
+    env e;
+    require e.msg.sender == from;
+    
+    mathint totalBefore = to_mathint(totalSupply());
+    
+    transfer(e, to, amount);
+    
+    mathint totalAfter = to_mathint(totalSupply());
+    
+    assert totalBefore == totalAfter, 
+        "Transfer must preserve total supply";
+}
+
+// RULE: No unauthorized balance increase
+rule noUnauthorizedIncrease(address user) {
+    env e;
+    require e.msg.sender != user;
+    
+    uint256 balanceBefore = balanceOf(user);
+    
+    // Any function call by non-user
+    calldataarg args;
+    f(e, args);
+    
+    uint256 balanceAfter = balanceOf(user);
+    
+    // Balance can only increase via explicit transfer TO user
+    assert balanceAfter >= balanceBefore || 
+           f.selector == sig:transfer(address,uint256).selector,
+        "Balance cannot decrease without user action";
+}
+```
+
+#### When to Use Formal Methods vs Fuzzing
+
+| Scenario | Recommended Approach |
+|----------|---------------------|
+| State machine correctness | Formal verification |
+| Arithmetic overflow | Fuzzing + formal |
+| ACL logic | Formal verification |
+| Complex multi-step attacks | Fuzzing |
+| Gas optimization validation | Fuzzing |
+| Protocol-level invariants | Formal verification |
+
 ---
 
-# Chapter 8: Ecosystem, Research & Future Directions {#chapter-8-ecosystem}
+# Chapter 8: Ecosystem, Research & Future Directions
 
 ## Current Ecosystem Projects
 
@@ -1655,9 +2254,492 @@ For critical FHE contracts, consider:
 - FHE standardization working groups
 - Open-source contribution to TFHE-rs, concrete
 
+## Operational Security for Production FHE Systems
+
+### Incident Response Playbook
+
+FHE systems have unique incident types requiring specialized response procedures.
+
+#### Incident Classification
+
+| Incident Type | Severity | Detection Method | Initial Response |
+|---------------|----------|------------------|------------------|
+| Single TDN node compromise | Medium | Node health monitoring | Isolate node, continue operation |
+| Threshold (t) nodes compromised | Critical | Anomalous decryption patterns | **Pause all operations** |
+| ACL bypass vulnerability | Critical | Audit finding or exploit | Pause affected contracts |
+| Ciphertext replay detected | High | Transaction monitoring | Invalidate affected handles |
+| Gateway compromise | Critical | Callback anomalies | Switch to backup gateway |
+| Key material exposure | Critical | External report | Emergency key rotation |
+
+#### Emergency Response Procedures
+
+**Threshold Compromise Response:**
+
+```solidity
+// Emergency pause pattern for FHE contracts
+contract EmergencyPausable {
+    address public guardian;
+    bool public paused;
+    uint256 public pausedAt;
+    
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+    
+    modifier whenPaused() {
+        require(paused, "Contract is not paused");
+        _;
+    }
+    
+    // Guardian can pause immediately
+    function emergencyPause() external {
+        require(msg.sender == guardian, "Not guardian");
+        paused = true;
+        pausedAt = block.timestamp;
+        emit EmergencyPaused(msg.sender, block.timestamp);
+    }
+    
+    // Unpause requires timelock for safety
+    uint256 public constant UNPAUSE_DELAY = 48 hours;
+    
+    function unpause() external {
+        require(msg.sender == guardian, "Not guardian");
+        require(block.timestamp >= pausedAt + UNPAUSE_DELAY, "Timelock");
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+    
+    // All FHE operations check pause state
+    function transfer(euint64 amount) external whenNotPaused {
+        // ... transfer logic
+    }
+}
+```
+
+**Post-Incident Checklist:**
+
+```markdown
+## FHE Incident Response Checklist
+
+### Immediate (0-1 hour)
+- [ ] Activate emergency pause if warranted
+- [ ] Notify TDN operators
+- [ ] Preserve logs and transaction history
+- [ ] Begin impact assessment
+
+### Short-term (1-24 hours)
+- [ ] Identify root cause
+- [ ] Determine scope of compromise
+- [ ] Notify affected users (if data exposed)
+- [ ] Prepare fix or mitigation
+
+### Recovery (24-72 hours)
+- [ ] Deploy patched contracts (if needed)
+- [ ] Initiate key rotation (if required)
+- [ ] Re-encrypt affected data
+- [ ] Conduct post-mortem
+```
+
+### Key Rotation & Re-encryption
+
+Key rotation is essential for long-term security of FHE systems.
+
+#### When to Rotate Keys
+
+| Trigger | Urgency | Scope |
+|---------|---------|-------|
+| Scheduled rotation | Low | Full system |
+| TDN node compromise (< t) | Medium | Affected key shares |
+| Threshold compromise | Critical | Full emergency rotation |
+| Library vulnerability disclosed | Medium | Assess and plan |
+| Employee departure (key custodian) | Medium | Affected ceremonies |
+
+#### Re-encryption Strategies
+
+**Lazy Re-encryption (Recommended for most cases):**
+
+```solidity
+contract LazyReencryption {
+    uint256 public currentKeyEpoch;
+    mapping(bytes32 => uint256) public ciphertextEpoch;
+    
+    // Check if ciphertext needs re-encryption before use
+    function ensureCurrentEpoch(euint64 ct) internal returns (euint64) {
+        bytes32 handle = FHE.getHandle(ct);
+        if (ciphertextEpoch[handle] < currentKeyEpoch) {
+            // Request async re-encryption
+            euint64 newCt = FHE.reencrypt(ct);
+            ciphertextEpoch[FHE.getHandle(newCt)] = currentKeyEpoch;
+            return newCt;
+        }
+        return ct;
+    }
+    
+    function transfer(address to, euint64 amount) external {
+        // Ensure sender balance is current
+        _balances[msg.sender] = ensureCurrentEpoch(_balances[msg.sender]);
+        // ... rest of transfer
+    }
+}
+```
+
+**Eager Re-encryption (For small state sets):**
+
+```solidity
+contract EagerReencryption {
+    function rotateAllBalances() external onlyAdmin {
+        for (uint i = 0; i < users.length; i++) {
+            _balances[users[i]] = FHE.reencrypt(_balances[users[i]]);
+        }
+        currentKeyEpoch++;
+    }
+}
+```
+
+#### Threshold Key Refresh Protocol
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant Gateway
+    participant Node1 as TDN Node 1
+    participant Node2 as TDN Node 2
+    participant Node3 as TDN Node 3
+    
+    Admin->>Gateway: InitiateKeyRefresh(newEpoch)
+    Gateway->>Node1: GenerateNewShare(epoch)
+    Gateway->>Node2: GenerateNewShare(epoch)
+    Gateway->>Node3: GenerateNewShare(epoch)
+    Node1-->>Gateway: NewShare1
+    Node2-->>Gateway: NewShare2
+    Node3-->>Gateway: NewShare3
+    Gateway->>Gateway: Verify shares combine to valid key
+    Gateway->>Admin: KeyRefreshComplete(newPubKey)
+```
+
+### Monitoring & Alerting
+
+Production FHE systems require specialized monitoring beyond standard blockchain metrics.
+
+#### Key Metrics to Monitor
+
+| Metric | Normal Range | Alert Threshold | Indicates |
+|--------|--------------|-----------------|-----------|
+| Decrypt requests/min | 10-100 | >500 | Possible exfiltration |
+| Failed ACL checks/hour | <1% of requests | >5% | Access control attack |
+| Callback failure rate | <0.1% | >1% | Gateway issues |
+| TDN node response time | <2s | >10s | Node health |
+| Gas per FHE operation | Baseline ±20% | >50% variance | Unusual computation |
+| Unique ciphertext handles/hour | Normal range | >3 std dev | Unusual activity |
+
+#### Example Monitoring Dashboard
+
+```yaml
+# prometheus/fhe-alerts.yaml
+groups:
+  - name: fhe-security
+    rules:
+      - alert: HighDecryptionRate
+        expr: rate(fhe_decrypt_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual decryption rate detected"
+          
+      - alert: ACLViolations
+        expr: rate(fhe_acl_denied_total[5m]) / rate(fhe_acl_checks_total[5m]) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High rate of ACL denials"
+          
+      - alert: TDNNodeUnhealthy
+        expr: fhe_tdn_node_response_time_seconds > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TDN node responding slowly"
+          
+      - alert: GatewayCallbackFailures
+        expr: rate(fhe_callback_failures_total[10m]) > 0.01
+        for: 15m
+        labels:
+          severity: high
+        annotations:
+          summary: "Gateway callback failures elevated"
+```
+
+#### Anomaly Detection for Encrypted Operations
+
+```python
+# monitoring/anomaly_detector.py
+import numpy as np
+from collections import defaultdict
+
+class FHEAnomalyDetector:
+    def __init__(self, window_size=100):
+        self.window_size = window_size
+        self.user_patterns = defaultdict(list)
+        
+    def record_operation(self, user: str, op_type: str, gas_used: int):
+        key = f"{user}:{op_type}"
+        self.user_patterns[key].append(gas_used)
+        
+        # Keep rolling window
+        if len(self.user_patterns[key]) > self.window_size:
+            self.user_patterns[key].pop(0)
+    
+    def is_anomalous(self, user: str, op_type: str, gas_used: int) -> bool:
+        key = f"{user}:{op_type}"
+        history = self.user_patterns[key]
+        
+        if len(history) < 10:
+            return False  # Not enough data
+        
+        mean = np.mean(history)
+        std = np.std(history)
+        
+        # Flag if >3 standard deviations from mean
+        return abs(gas_used - mean) > 3 * std
+```
+
+## Advanced FHE Integration Patterns
+
+### Contract Composability
+
+Safely composing FHE contracts requires careful ACL management.
+
+#### Composability Challenges
+
+| Challenge | Risk | Solution |
+|-----------|------|----------|
+| ACL propagation | Permission inflation | Explicit transient grants |
+| Cross-contract calls | Ciphertext escapes | Verify caller at each hop |
+| Flash loan patterns | Temporary state inconsistency | Atomic operations |
+| Delegate calls | Storage confusion | Never use with FHE state |
+
+#### Safe Composability Pattern
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {FHE, euint64, ebool} from "@fhenix/cofhe-contracts/FHE.sol";
+
+interface IComposableCallback {
+    function onFHEReceived(
+        address from,
+        euint64 amount,
+        bytes calldata data
+    ) external returns (bytes4);
+}
+
+contract ComposableFHERC20 {
+    bytes4 public constant CALLBACK_SUCCESS = 
+        IComposableCallback.onFHEReceived.selector;
+    
+    function transferWithCallback(
+        address to,
+        euint64 amount,
+        bytes calldata data
+    ) external returns (ebool) {
+        ebool success = _transfer(msg.sender, to, amount);
+        
+        // Only grant transient permission to receiver
+        FHE.allowTransient(amount, to);
+        
+        // If receiver is contract, notify it
+        if (to.code.length > 0) {
+            bytes4 response = IComposableCallback(to).onFHEReceived(
+                msg.sender,
+                amount,
+                data
+            );
+            require(response == CALLBACK_SUCCESS, "Callback failed");
+        }
+        
+        return success;
+    }
+}
+
+contract ComposableVault is IComposableCallback {
+    ComposableFHERC20 public token;
+    mapping(address => euint64) public deposits;
+    
+    function onFHEReceived(
+        address from,
+        euint64 amount,
+        bytes calldata /* data */
+    ) external override returns (bytes4) {
+        require(msg.sender == address(token), "Only token");
+        
+        // Safely accumulate deposit
+        deposits[from] = FHE.add(deposits[from], amount);
+        
+        return CALLBACK_SUCCESS;
+    }
+}
+```
+
+### ZK + FHE Integration
+
+Combining ZK proofs with FHE provides both privacy and verifiability.
+
+#### When to Use Each Technology
+
+| Requirement | ZK Only | FHE Only | ZK + FHE |
+|-------------|---------|----------|----------|
+| Prove statement about hidden data | ✅ | ❌ | ✅ |
+| Compute on hidden data | ❌ | ✅ | ✅ |
+| Verify computation correctness | Built-in | ⚠️ Trust coprocessor | ✅ |
+| Multiple parties compute | ❌ | ✅ | ✅ |
+| Performance critical | ✅ Faster | ❌ Slower | ⚠️ |
+
+#### ZK Proof of Encrypted Input Validity
+
+```solidity
+// Prove encrypted value is within range without revealing it
+contract ZKValidatedFHE {
+    // Verifier contract for ZK proofs
+    IGroth16Verifier public verifier;
+    
+    function depositWithProof(
+        euint64 encryptedAmount,
+        bytes calldata rangeProof,
+        uint256[8] calldata zkProof
+    ) external {
+        // 1. Verify ZK proof that plaintext is in valid range
+        // The proof attests: 0 < plaintext < MAX_DEPOSIT
+        // without revealing the actual value
+        uint256[2] memory publicInputs = [
+            uint256(FHE.getHandle(encryptedAmount)),
+            MAX_DEPOSIT
+        ];
+        
+        require(verifier.verify(zkProof, publicInputs), "Invalid range proof");
+        
+        // 2. Now safe to use the encrypted value
+        deposits[msg.sender] = FHE.add(deposits[msg.sender], encryptedAmount);
+    }
+}
+```
+
+#### ZK Proof of Correct FHE Computation
+
+```mermaid
+graph LR
+    subgraph "User Side"
+        A[Input] --> B[Encrypt]
+        B --> C[Send to Chain]
+    end
+    
+    subgraph "FHE Coprocessor"
+        C --> D[FHE Computation]
+        D --> E[Generate ZK Proof]
+    end
+    
+    subgraph "On-Chain Verification"
+        E --> F[Verify ZK Proof]
+        F --> G[Accept Result]
+    end
+```
+
+### Upgrade Patterns for FHE Contracts
+
+Upgrading FHE contracts requires special handling of encrypted state.
+
+#### FHE-Compatible Proxy Pattern
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
+contract FHEProxy is ERC1967Proxy {
+    // FHE state lives in implementation, not proxy
+    // This is safe because handles are deterministic
+    
+    constructor(address implementation, bytes memory data) 
+        ERC1967Proxy(implementation, data) 
+    {}
+}
+
+contract FHETokenV1 {
+    mapping(address => euint64) internal _balances;
+    euint64 internal _totalSupply;
+    
+    // ... V1 implementation
+}
+
+contract FHETokenV2 is FHETokenV1 {
+    // New storage MUST be appended, never reordered
+    mapping(address => euint64) internal _frozen;
+    
+    // New functionality
+    function freeze(address user) external onlyAdmin {
+        _frozen[user] = _balances[user];
+        _balances[user] = FHE.asEuint64(0);
+    }
+}
+```
+
+#### Ciphertext Compatibility Across Versions
+
+> [!WARNING]
+> FHE library upgrades may change ciphertext format. Always verify compatibility before upgrading.
+
+```solidity
+contract VersionAwareFHE {
+    uint256 public constant CURRENT_FHE_VERSION = 2;
+    mapping(bytes32 => uint256) public ciphertextVersion;
+    
+    function migrateIfNeeded(euint64 ct) internal returns (euint64) {
+        bytes32 handle = FHE.getHandle(ct);
+        uint256 version = ciphertextVersion[handle];
+        
+        if (version < CURRENT_FHE_VERSION) {
+            // Decrypt with old version, re-encrypt with new
+            // This requires gateway support for version migration
+            return FHE.migrate(ct, version, CURRENT_FHE_VERSION);
+        }
+        return ct;
+    }
+}
+```
+
+#### Safe Upgrade Checklist
+
+```markdown
+## FHE Contract Upgrade Checklist
+
+### Pre-Upgrade
+- [ ] Verify new implementation against old storage layout
+- [ ] Test upgrade path on testnet with production state snapshot
+- [ ] Verify FHE library version compatibility
+- [ ] Check for pending decryption requests
+- [ ] Notify TDN operators of planned upgrade
+
+### During Upgrade
+- [ ] Pause contract (if possible)
+- [ ] Execute upgrade transaction
+- [ ] Verify proxy points to new implementation
+- [ ] Run smoke tests on critical functions
+
+### Post-Upgrade
+- [ ] Unpause contract
+- [ ] Monitor for anomalies
+- [ ] Verify ciphertext operations work correctly
+- [ ] Document migration for audit trail
+```
+
 ---
 
-# Appendices {#appendices}
+# Appendices
 
 ## Appendix A: Vulnerability Reference Quick Guide
 
@@ -1724,7 +2806,6 @@ For critical FHE contracts, consider:
 | **dBFV** | Decomposed BFV - Fhenix's high-precision FHE scheme |
 | **fhEVM** | Fully Homomorphic EVM - Zama's encrypted Ethereum VM |
 | **IND-CPA** | Indistinguishability under Chosen Plaintext Attack |
-| **IND-CPAD** | IND-CPA with Decryption queries |
 | **KMS** | Key Management System |
 | **LWE** | Learning With Errors - hardness assumption |
 | **Noise** | Random error in ciphertexts, grows with operations |
@@ -1733,26 +2814,48 @@ For critical FHE contracts, consider:
 | **TFHE** | Torus FHE - fast bootstrapping scheme |
 | **Transient Permission** | Transaction-scoped ACL grant |
 
-## Appendix D: Additional Resources
+## Appendix D: References & Sources
 
-### Security Research Papers
+### Academic Papers
 
-1. **Key Recovery Attacks on FHE Libraries** - Zellic, 2024
-2. **Side-Channel Attacks on Homomorphic Encryption** - NCSU Research
-3. **dBFV White Paper** - [eprint.iacr.org/2025/2321](https://eprint.iacr.org/2025/2321)
-4. **Threshold Decryption Network** - [eprint.iacr.org/2025/1781](https://eprint.iacr.org/2025/1781)
+| Paper | Authors/Org | Year | Topic |
+|-------|-------------|------|-------|
+| [dBFV: Threshold Decryption for FHE](https://eprint.iacr.org/2025/2321) | Fhenix Team | 2025 | dBFV scheme, noise-free threshold decryption |
+| [Threshold Decryption Networks](https://eprint.iacr.org/2025/1781) | Fhenix | 2025 | TDN architecture and security model |
+| [TFHE: Fast FHE over the Torus](https://eprint.iacr.org/2018/421) | Chillotti et al. | 2018 | TFHE scheme foundations |
+| [BFV Scheme](https://eprint.iacr.org/2012/144) | Brakerski | 2012 | Original BFV construction |
+| [Key Recovery Attacks on FHE](https://www.zellic.io/blog/fhe-key-recovery) | Zellic | 2024 | Library implementation vulnerabilities |
+
+### Security Audit Reports
+
+| Audit | Auditor | Scope | Year |
+|-------|---------|-------|------|
+| Zama Protocol (~70 audit-weeks) | Trail of Bits, OpenZeppelin, Zenith, Burrasec | TFHE-rs, fhEVM, KMS, Gateway | 2024 |
+| Fhenix CoFHE | Pending/TBA | Threshold Decryption Network | 2025 |
+
+> [!NOTE]
+> Zama's ~70 audit-weeks makes TFHE-rs the first professionally audited FHE library. Audit reports available at [zama.org/blog](https://www.zama.org/blog).
 
 ### Official Documentation
 
-- [Fhenix Developer Docs](https://docs.fhenix.io/)
-- [Zama Documentation](https://docs.zama.ai/)
-- [OpenZeppelin FHEVM Security Guide](https://openzeppelin.com/)
+- [Fhenix Developer Docs](https://docs.fhenix.io/) - CoFHE integration, cofhejs SDK
+- [Zama Documentation](https://docs.zama.ai/) - fhEVM, TFHE-rs, Concrete
+- [OpenZeppelin FHEVM Security Guide](https://blog.openzeppelin.com/a-developers-guide-to-fhevm-security) - Security patterns
+- [Homomorphic Encryption Standard](https://homomorphicencryption.org/) - Parameter recommendations
+
+### Industry Standards
+
+| Standard | Organization | Relevance |
+|----------|--------------|-----------|
+| Post-Quantum Cryptography Guidelines | NIST | Lattice-based security parameters |
+| Homomorphic Encryption Standard | HomomorphicEncryption.org | FHE security parameter recommendations |
+| ERC-20 Token Standard | Ethereum | FHERC20 compatibility |
 
 ### Community Resources
 
-- [awesome-fhenix](https://github.com/FhenixProtocol/awesome-fhenix)
-- [Crypto 101](https://www.crypto101.io/)
-- [FHE Textbook](https://fhetextbook.github.io/)
+- [awesome-fhenix](https://github.com/FhenixProtocol/awesome-fhenix) - Curated FHE resources
+- [Crypto 101](https://www.crypto101.io/) - Cryptography fundamentals
+- [FHE Textbook](https://fhetextbook.github.io/) - Academic reference
 
 ## Appendix E: Development & Audit Setup
 
