@@ -1,5 +1,7 @@
 # FHE Security Handbook
 
+> WIP: improvement needed
+
 **A Security-Focused Guide to Fully Homomorphic Encryption for Web3 Protocols**
 
 *Aligned with Zama fhEVM, Fhenix CoFHE, and Web3 Security Best Practices*
