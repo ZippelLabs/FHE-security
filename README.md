@@ -206,13 +206,13 @@ Find $s$. This problem is believed to be hard even for quantum computers.
 
 ### Scheme Comparison
 
-| Scheme | Data Type | Exact? | Speed | Use Case |
-|--------|-----------|--------|-------|----------|
-| **BGV** | Integers | ✅ | Medium | General computation |
-| **BFV** | Integers | ✅ | Medium | Smart contracts |
-| **CKKS** | Approx. floats | ❌ (~10-20 bits) | Fast | ML/Analytics |
-| **TFHE** | Bits/small ints | ✅ | Fast bootstrap | Fhenix, Zama |
-| **dBFV** | Integers | ✅ Exact | Medium | Fhenix (optimized noise) |
+| Scheme | Data Type | Exact? | Speed | Use Case | Original Paper |
+|--------|-----------|--------|-------|----------|----------------|
+| **BGV** | Integers | ✅ | Medium | General computation | [ePrint 2011/277](https://eprint.iacr.org/2011/277) |
+| **BFV** | Integers | ✅ | Medium | Smart contracts | [ePrint 2012/144](https://eprint.iacr.org/2012/144) |
+| **CKKS** | Approx. floats | ❌ (~10-20 bits) | Fast | ML/Analytics | [ASIACRYPT 2017](https://link.springer.com/chapter/10.1007/978-3-319-70694-8_15) |
+| **TFHE** | Bits/small ints | ✅ | Fast bootstrap | Fhenix, Zama | [J. Cryptol. 2019](https://link.springer.com/article/10.1007/s00145-019-09319-x) |
+| **dBFV** | Integers | ✅ Exact | Medium | Fhenix (optimized noise) | [ePrint 2025/2321](https://eprint.iacr.org/2025/2321) |
 
 ### TFHE (Torus FHE)
 
@@ -232,6 +232,9 @@ Fhenix's novel scheme from their [white paper](https://eprint.iacr.org/2025/2321
 
 ## Common Cryptographic Vulnerabilities
 
+> [!NOTE]
+> For comprehensive attack research, see [awesome-fhe-attacks](https://github.com/Hexens/awesome-fhe-attacks) - a curated repository of FHE security research maintained by Hexens.
+
 ### 1. Lattice-Based Attacks
 
 **Subfield Lattice Attack:**
@@ -239,24 +242,32 @@ Fhenix's novel scheme from their [white paper](https://eprint.iacr.org/2025/2321
 - **Historical Note**: LTV (Lopez-Alt et al., 2012) and BLLN (Brakerski-Langlois-Lepoint-Naehrig, 2013) were early FHE schemes broken by subfield lattice attacks in 2015-2016
 - Modern schemes (TFHE, BGV, BFV, CKKS) use different algebraic structures and parameter regimes
 - **Audit check**: Verify scheme is not using deprecated constructions (LTV, BLLN, overstretched NTRU)
+- **Research**: [A Successful Subfield Lattice Attack on FHE](https://eprint.iacr.org/2021/1626) | [Revisiting Lattice Attacks on Overstretched NTRU](https://www.di.ens.fr/~fouque/euro17a.pdf)
 
 **Dual Lattice Attack:**
 - Exploits weak modulus-to-dimension ratios
 - **Audit check**: Verify security level claims (128-bit minimum recommended)
+- **Research**: [On Dual Lattice Attacks Against Small-Secret LWE](https://eprint.iacr.org/2017/047) | [Hybrid Dual and Meet-LWE Attack](https://eprint.iacr.org/2022/1330)
 
 ### 2. Key Recovery Attacks
 
-Recent research has demonstrated practical key recovery against major FHE libraries:
+Recent research (2024) has demonstrated practical key recovery against major FHE libraries:
 
-| Library | Attack Type | Status |
-|---------|-------------|--------|
-| SEAL | Chosen ciphertext | Patched |
-| OpenFHE | Timing side-channel | Patched |
-| TFHE-rs | Power analysis | Mitigated |
-| Lattigo | Parameter weakness | Patched |
+| Library | Attack Type | Reference | Status |
+|---------|-------------|-----------|--------|
+| SEAL | IND-CPAD/Chosen ciphertext | [ePrint 2024/127](https://eprint.iacr.org/2024/127) | Patched |
+| OpenFHE | IND-CPAD exploitation | [ePrint 2024/116](https://eprint.iacr.org/2024/116) | Patched |
+| TFHE-rs | Decryption error induction | [ePrint 2022/1563](https://eprint.iacr.org/2022/1563) | Mitigated |
+| Lattigo | Parameter weakness | [ePrint 2024/116](https://eprint.iacr.org/2024/116) | Patched |
+
+**Key Research Papers:**
+- [On the Practical CPAD Security of "Exact" and Threshold FHE Schemes](https://eprint.iacr.org/2024/116) - CRYPTO 2024
+- [Attacks Against the IND-CPAD Security of Exact FHE Schemes](https://eprint.iacr.org/2024/127) - Demonstrates key recovery in <1 hour on BFV/BGV
+- [A Practical Full Key Recovery Attack on TFHE and FHEW](https://eprint.iacr.org/2022/1563) - Via induced decryption errors
+- [Key Recovery Attacks on Approximate HE with Non-Worst-Case Noise Flooding](https://www.usenix.org/system/files/sec24summer-prepub-822-guo.pdf) - USENIX Security 2024
 
 > [!CAUTION]
-> **Security Engineers**: Always verify the library version. Many attacks have been patched in recent releases. Check CVE databases and library changelogs.
+> **Security Engineers**: Always verify the library version. Many attacks have been patched in recent releases. Check CVE databases and library changelogs. See [Zellic's Key Recovery Analysis](https://www.zellic.io/blog/fhe-key-recovery) for practical implications.
 
 ### 3. Noise Management Failures
 
@@ -2816,15 +2827,95 @@ contract VersionAwareFHE {
 
 ## Appendix D: References & Sources
 
-### Academic Papers
+### Influential Papers (Foundational FHE Research)
 
-| Paper | Authors/Org | Year | Topic |
-|-------|-------------|------|-------|
-| [dBFV: Threshold Decryption for FHE](https://eprint.iacr.org/2025/2321) | Fhenix Team | 2025 | dBFV scheme, noise-free threshold decryption |
-| [Threshold Decryption Networks](https://eprint.iacr.org/2025/1781) | Fhenix | 2025 | TDN architecture and security model |
-| [TFHE: Fast FHE over the Torus](https://eprint.iacr.org/2018/421) | Chillotti et al. | 2018 | TFHE scheme foundations |
-| [BFV Scheme](https://eprint.iacr.org/2012/144) | Brakerski | 2012 | Original BFV construction |
-| [Key Recovery Attacks on FHE](https://www.zellic.io/blog/fhe-key-recovery) | Zellic | 2024 | Library implementation vulnerabilities |
+*Curated from [fhe.org](https://fhe.org/resources) - the community resource hub for FHE*
+
+| Paper | Authors | Year | Significance |
+|-------|---------|------|--------------|
+| [Fully Homomorphic Encryption Using Ideal Lattices](https://dl.acm.org/doi/abs/10.1145/1536414.1536440) | Craig Gentry | 2009 | First FHE construction (STOC) |
+| [Fully Homomorphic Encryption without Bootstrapping](https://eprint.iacr.org/2011/277) | Brakerski, Gentry, Vaikuntanathan | 2011 | BGV scheme |
+| [Somewhat Practical Fully Homomorphic Encryption](https://eprint.iacr.org/2012/144) | Fan, Vercauteren | 2012 | BFV scheme |
+| [FHEW: Bootstrapping in Less Than a Second](https://link.springer.com/chapter/10.1007/978-3-662-46800-5_24) | Ducas, Micciancio | 2015 | Fast bootstrapping (EUROCRYPT) |
+| [TFHE: Fast FHE Over the Torus](https://link.springer.com/article/10.1007/s00145-019-09319-x) | Chillotti, Gama, Georgieva, Izabachène | 2016 | TFHE scheme (J. Cryptology) |
+| [Homomorphic Encryption for Approximate Numbers](https://link.springer.com/chapter/10.1007/978-3-319-70694-8_15) | Cheon, Kim, Kim, Song | 2017 | CKKS scheme (ASIACRYPT) |
+| [On Data and Privacy Homomorphisms](https://luca-giuzzi.unibs.it/corsi/Support/papers-cryptography/RAD78.pdf) | Rivest, Adleman, Dertouzos | 1978 | Original concept proposal |
+
+### Security Research Papers
+
+*Curated from [awesome-fhe-attacks](https://github.com/Hexens/awesome-fhe-attacks) by Hexens and IACR ePrint*
+
+**IND-CPAD & Key Recovery Attacks (2024):**
+| Paper | Authors | Venue | Impact |
+|-------|---------|-------|--------|
+| [On the Practical CPAD Security of "Exact" and Threshold FHE](https://eprint.iacr.org/2024/116) | Checri, Sirdey, Boudguiga, Bultel | CRYPTO 2024 | Key recovery on BFV/BGV/TFHE in <1 hour |
+| [Attacks Against the IND-CPAD Security of Exact FHE](https://eprint.iacr.org/2024/127) | Cheon, Choe, Passelègue, Stehlé | ePrint 2024 | Exploits imperfect correctness |
+| [Security Guidelines for Implementing HE](https://eprint.iacr.org/2024/463) | HomomorphicEncryption.org | Comm. Cryptology 2025 | Implementation best practices |
+| [Key Recovery on Approximate HE (Noise Flooding)](https://www.usenix.org/system/files/sec24summer-prepub-822-guo.pdf) | Guo et al. | USENIX Security 2024 | CKKS noise flooding attacks |
+
+**Lattice Attacks:**
+- [A Successful Subfield Lattice Attack on FHE](https://eprint.iacr.org/2021/1626) - Breaks NTRU-based schemes
+- [On Dual Lattice Attacks Against Small-Secret LWE](https://eprint.iacr.org/2017/047) - HElib/SEAL parameter analysis
+- [Revisiting Lattice Attacks on Overstretched NTRU](https://www.di.ens.fr/~fouque/euro17a.pdf) - NTRU cryptanalysis
+
+**Side-Channel & Other Attacks:**
+- [Leaking Secrets in HE with Side-Channel Attacks](https://eprint.iacr.org/2023/1128) - Timing/power analysis
+- [A Practical Full Key Recovery on TFHE and FHEW](https://eprint.iacr.org/2022/1563) - Decryption error induction
+- [Model Stealing Attacks on FHE-based ML](https://eprint.iacr.org/2023/1665) - FHE ML vulnerabilities
+
+### FHE Libraries
+
+*Curated from [awesome-he](https://github.com/jonaschn/awesome-he) and [fhe.org](https://fhe.org/resources)*
+
+| Library | Language | Schemes | Maintainer | Notes |
+|---------|----------|---------|------------|-------|
+| [TFHE-rs](https://github.com/zama-ai/tfhe-rs) | Rust | TFHE | Zama | Audited, fhEVM backend |
+| [Concrete](https://github.com/zama-ai/concrete) | Python/Rust | TFHE | Zama | High-level FHE compiler |
+| [Concrete ML](https://github.com/zama-ai/concrete-ml) | Python | TFHE | Zama | Privacy-preserving ML |
+| [OpenFHE](https://github.com/openfheorg/openfhe-development) | C++ | All major | Duality Tech | Production-ready, all schemes |
+| [SEAL](https://github.com/microsoft/SEAL) | C++ | BFV, CKKS | Microsoft | Widely used, well-documented |
+| [HElib](https://github.com/HomEnc/HElib) | C++ | BGV, CKKS | IBM | Bootstrapping support |
+| [Lattigo](https://github.com/ldsec/lattigo) | Go | BGV, CKKS, RLWE | Tune Insight | Multiparty HE |
+| [HEaaN](https://heaan.it/) | C++ | CKKS | CryptoLab | GPU acceleration, bootstrapping |
+| [Swift HE](https://github.com/apple/swift-homomorphic-encryption) | Swift | BFV, BGVL | Apple | iOS/macOS integration |
+| [HEIR](https://github.com/google/heir) | MLIR | Multiple | Google | Compiler toolchain |
+| [Jaxite](https://github.com/google/jaxite) | JAX | TFHE | Google | TPU acceleration |
+
+### Curated Resource Collections
+
+| Repository | Maintainer | Focus |
+|------------|------------|-------|
+| [fhe.org/resources](https://fhe.org/resources) | FHE.org Community | Comprehensive FHE resources, meetups, tutorials |
+| [awesome-zama](https://github.com/zama-ai/awesome-zama) | Zama AI | TFHE-rs, Concrete, fhEVM, research papers |
+| [awesome-he](https://github.com/jonaschn/awesome-he) | Community | HE libraries, applications, toolkits |
+| [awesome-openfhe](https://github.com/openfheorg/awesome-openfhe) | OpenFHE | OpenFHE ecosystem resources |
+| [awesome-fhe-attacks](https://github.com/Hexens/awesome-fhe-attacks) | Hexens | Security research, attack papers, tools |
+| [awesome-fhenix](https://github.com/FhenixProtocol/awesome-fhenix) | Fhenix | Fhenix/CoFHE ecosystem |
+
+### Learning Resources
+
+**Courses:**
+- [CSE208: Advanced Cryptography (FHE)](https://cseweb.ucsd.edu/classes/wi23/cse208-a/) - UC San Diego, Daniele Micciancio
+- [Homomorphic Encryption and Lattices](https://shaih.github.io/lattices-and-HE-class/index.html) - Shai Halevi (2011)
+- [Foundations of Private Computation](https://courses.openmined.org/courses/foundations-of-private-computation) - OpenMined
+
+**Textbooks:**
+- [Homomorphic Encryption for Data Science (HE4DS)](https://link.springer.com/book/10.1007/978-3-031-65494-7) - IBM, 2024
+- [FHE Textbook](https://fhetextbook.github.io/) - Academic reference
+- [Crypto 101](https://www.crypto101.io/) - Cryptography fundamentals
+
+**Talks & Presentations:**
+- [Attacks Against IND-CPAD Security](https://www.youtube.com/watch?v=YvBZIcUVXZ8) - Damien Stehlé
+- [Estimating Lattice-Based Crypto Security](https://www.youtube.com/watch?v=BIDBfVFzuck) - Martin Albrecht
+- [Danger of Using FHE](https://www.youtube.com/watch?v=o52Y7UNli10) - Zhiniang Peng
+
+### Security Tools & Resources
+
+| Tool | Purpose | Link |
+|------|---------|------|
+| Lattice Estimator | Estimate lattice-based crypto security | [GitHub](https://github.com/malb/lattice-estimator) |
+| IND-CPAD Attack PoC | Threshold FHE attack demonstration | [GitHub](https://github.com/hmchoe0528/INDCPAD_HE_ThresFHE) |
+| LWE Benchmarking | Attack benchmarks on LWE | [GitHub](https://github.com/facebookresearch/LWE-benchmarking) |
 
 ### Security Audit Reports
 
@@ -2840,6 +2931,7 @@ contract VersionAwareFHE {
 
 - [Fhenix Developer Docs](https://docs.fhenix.io/) - CoFHE integration, cofhejs SDK
 - [Zama Documentation](https://docs.zama.ai/) - fhEVM, TFHE-rs, Concrete
+- [OpenFHE Documentation](https://openfhe-development.readthedocs.io/) - OpenFHE usage
 - [OpenZeppelin FHEVM Security Guide](https://blog.openzeppelin.com/a-developers-guide-to-fhevm-security) - Security patterns
 - [Homomorphic Encryption Standard](https://homomorphicencryption.org/) - Parameter recommendations
 
@@ -2850,12 +2942,6 @@ contract VersionAwareFHE {
 | Post-Quantum Cryptography Guidelines | NIST | Lattice-based security parameters |
 | Homomorphic Encryption Standard | HomomorphicEncryption.org | FHE security parameter recommendations |
 | ERC-20 Token Standard | Ethereum | FHERC20 compatibility |
-
-### Community Resources
-
-- [awesome-fhenix](https://github.com/FhenixProtocol/awesome-fhenix) - Curated FHE resources
-- [Crypto 101](https://www.crypto101.io/) - Cryptography fundamentals
-- [FHE Textbook](https://fhetextbook.github.io/) - Academic reference
 
 ## Appendix E: Development & Audit Setup
 
