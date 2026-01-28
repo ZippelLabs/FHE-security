@@ -497,11 +497,11 @@ $$\beta = \log_2\left(\frac{q}{2 \cdot e_{current}}\right) \text{ bits}$$
 
 ```mermaid
 flowchart LR
-    subgraph Bootstrapping["Bootstrapping (Programmable)"]
+    subgraph Bootstrapping["Programmable Bootstrapping"]
         direction LR
-        In[Ciphertext with Noise] -->|Blind Rotate| Acc[Accumulator]
-        LUT[Lookup Table / Function f(x)] -.-> Acc
-        Acc -->|Sample Extract| Out[Ciphertext of f(x) with Low Noise]
+        In["Ciphertext with Noise"] -->|Blind Rotate| Acc["Accumulator"]
+        LUT["Lookup Table"] --> Acc
+        Acc -->|Sample Extract| Out["Fresh Ciphertext"]
     end
     style In fill:#ffcccc,stroke:#ff0000
     style Out fill:#ccffcc,stroke:#00ff00
