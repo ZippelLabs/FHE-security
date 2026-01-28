@@ -20,6 +20,10 @@
 
 ---
 
+📋 **[FHE Protocol Security Audit Checklist](./FHE_AUDIT_CHECKLIST.md)** - Comprehensive security audit checklist covering IND-CPA/CCA/CPAD, lattice attacks, side-channels, key recovery, and implementation security.
+
+---
+
 # Chapter 1: Introduction to FHE for Security Engineers & Developers
 
 ## What is Fully Homomorphic Encryption?
